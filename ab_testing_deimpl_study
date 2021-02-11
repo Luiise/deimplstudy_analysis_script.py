@@ -1,0 +1,618 @@
+#!/usr/bin/python
+from __future__ import division
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pymc3 as pm
+import pandas as pd
+from pandas.plotting import table
+import seaborn as sns
+from pprint import pprint as print
+from matplotlib.backends.backend_pdf import PdfPages
+import plotly.figure_factory as ff
+from scipy.stats import shapiro
+from scipy.stats import mannwhitneyu
+from statsmodels.stats.power import TTestIndPower
+
+import sqlite3
+
+sns.set(color_codes=True)
+from scipy.stats import ttest_ind
+import sys
+
+conn = sqlite3.connect('databaseSQLite.sqlite')
+cursor = conn.cursor()
+
+
+# def get_col_vals(df, col1, col2):
+#     """
+#     Get column values
+#     """
+#     drug = (101, 100, 102, 104, 102, 97, 105, 105, 98, 101, 100, 123, 105, 103, 100, 95, 102, 106,
+#             109, 102, 82, 102, 100, 102, 102, 101, 102, 102, 103, 103, 97, 97, 103, 101, 97, 104,
+#             96, 103, 124, 101, 101, 100, 101, 101, 104, 100, 101)
+#     placebo = (99, 101, 100, 101, 102, 100, 97, 101, 104, 101, 102, 102, 100, 105, 88, 101, 100,
+#                104, 100, 100, 100, 101, 102, 103, 97, 101, 101, 100, 101, 99, 101, 100, 100,
+#                101, 100, 99, 101, 100, 102, 99, 100, 99)
+#     y1 = np.array(drug)
+#     y2 = np.array(placebo)
+#
+#     return y1, y2
+#
+#
+# def prep_data(df, col1, col2):
+#     """
+#     Prepare data for pymc3 and return mean mu and sigma
+#     """
+#
+#     drug = (101, 100, 102, 104, 102, 97, 105, 105, 98, 101, 100, 123, 105, 103, 100, 95, 102, 106,
+#             109, 102, 82, 102, 100, 102, 102, 101, 102, 102, 103, 103, 97, 97, 103, 101, 97, 104,
+#             96, 103, 124, 101, 101, 100, 101, 101, 104, 100, 101)
+#     placebo = (99, 101, 100, 101, 102, 100, 97, 101, 104, 101, 102, 102, 100, 105, 88, 101, 100,
+#                104, 100, 100, 100, 101, 102, 103, 97, 101, 101, 100, 101, 99, 101, 100, 100,
+#                101, 100, 99, 101, 100, 102, 99, 100, 99)
+#
+#     y1 = np.array(drug)
+#     y2 = np.array(placebo)
+#
+#     # np.r_[a,b] - concat a,b
+#     # dataframe:
+#     # value  group
+#     # 101    drug
+#     # 100    drug
+#     # ...
+#     # 99     placebo
+#     # ...
+#     # 99     placebo
+#     y = pd.DataFrame(dict(value=np.r_[y1, y2],
+#                           group=np.r_[[col1] * len(y1),
+#                                       [col2] * len(y2)]))
+#     mu = y.value.mean()
+#     sigma = y.value.std() * 2
+#
+#     y.hist("value", by="group", figsize=(12, 4))
+#     plt.show()
+#
+#     return y, mu, sigma
+#
+#
+# y, mu, sigma = prep_data([], 'drug', 'placebo')
+# y.hist('value', by='group')
+#
+# # likelihood functions
+# # y(treat)i∼T(ν,μ1,σ1)
+# # y(placebo)i∼T(ν,μ2,σ2)
+#
+# # Since the means are real-valued, we will apply normal priors on them,
+# # and arbitrarily set the hyperparameters to the pooled empirical mean of the data
+# # and twice the pooled empirical standard deviation, which applies very diffuse information
+# # to these quantities (and importantly, does not favor one or the other a priori).
+# # μk∼N(x¯,2s)
+#
+# μ_m = y.value.mean()
+# μ_s = y.value.std() * 2
+#
+# # group standard deviations to have a Uniform(1,10) prior
+# σ_low = 1
+# σ_high = 10
+#
+# with pm.Model() as model:
+#     y1, y2 = get_col_vals([], "", "")
+#     # priors
+#     group1_mean = pm.Normal("group1_mean", mu=μ_m, sd=μ_s)
+#     group2_mean = pm.Normal("group2_mean", mu=μ_m, sd=μ_s)
+#
+#     group1_std = pm.Uniform("group1_std", lower=σ_low, upper=σ_high)
+#     group2_std = pm.Uniform("group2_std", lower=σ_low, upper=σ_high)
+#
+#     """
+#         Prior for ν is an exponential (lambda=29) shifted +1.
+#         spreads credibility fairly evenly over nearly normal or heavy tailed data;
+#         this allocates high prior probability over the regions of the parameter that
+#         describe the range from normal to heavy-tailed data under the Student-T distribution.
+#         """
+#     ν = pm.Exponential('ν_minus_one', 1 / 29.) + 1
+#
+#     # Since PyMC3 parameterizes the Student-T in terms of precision,
+#     # rather than standard deviation, we must transform the standard deviations
+#     # before specifying our likelihoods.
+#     """
+#             Transforming standard deviations to precisions (inverse-variance: 1/variance) before
+#             specifying likelihoods.
+#             """
+#     # precisions inverse-variance
+#     λ1 = group1_std ** -2
+#     λ2 = group2_std ** -2
+#
+#     # likelihood
+#     group1 = pm.StudentT("drug", nu=ν, mu=group1_mean, lam=λ1, observed=y1)
+#     group2 = pm.StudentT("placebo", nu=ν, mu=group2_mean, lam=λ2, observed=y2)
+#
+# with model:
+#     diff_of_means = pm.Deterministic("difference of means", group1_mean - group2_mean)
+#     diff_of_stds = pm.Deterministic("difference of stds", group1_std - group2_std)
+#
+#     """
+#        The effect size is the difference in means/pooled estimates of the standard deviation.
+#        The Deterministic class represents variables whose values are completely determined
+#        by the values of their parents.
+#        """
+#     effect_size = pm.Deterministic(
+#         "effect size", diff_of_means / np.sqrt((group1_std ** 2 + group2_std ** 2) / 2)
+#     )
+#
+# # with model:
+# #     trace = pm.sample(2000, cores=1)
+# #
+# # pm.plot_posterior(
+# #     trace,
+# #     var_names=["group1_mean", "group2_mean", "group1_std", "group2_std", "ν_minus_one"],
+# #     color="#87ceeb",
+# # )
+# # plt.show()
+# #
+# # pm.plot_posterior(
+# #     trace,
+# #     var_names=["difference of means", "difference of stds", "effect size"],
+# #     ref_val=0,
+# #     color="#87ceeb",
+# # )
+#
+# plt.show()
+
+
+# https://github.com/neilernst/cliffsDelta/blob/master/cliffsDelta.py
+def cliffs_delta(lst1, lst2, **dull):
+    """Returns delta and true if there are more than 'dull' differences"""
+    if not dull:
+        dull = {'small': 0.147, 'medium': 0.33, 'large': 0.474}  # effect sizes from (Hess and Kromrey, 2004)
+    m, n = len(lst1), len(lst2)
+    lst2 = sorted(lst2)
+    j = more = less = 0
+    for repeats, x in runs(sorted(lst1)):
+        while j <= (n - 1) and lst2[j] < x:
+            j += 1
+        more += j * repeats
+        while j <= (n - 1) and lst2[j] == x:
+            j += 1
+        less += (n - j) * repeats
+    d = (more - less) / (m * n)
+    size = lookup_size(d, dull)
+    return d, size
+
+
+def lookup_size(delta: float, dull: dict) -> str:
+    delta = abs(delta)
+    if delta < dull['small']:
+        return 'negligible'
+    if dull['small'] <= delta < dull['medium']:
+        return 'small'
+    if dull['medium'] <= delta < dull['large']:
+        return 'medium'
+    if delta >= dull['large']:
+        return 'large'
+
+
+def runs(lst):
+    """Iterator, chunks repeated values"""
+    for j, two in enumerate(lst):
+        if j == 0:
+            one, i = two, 0
+        if one != two:
+            yield j - i, one
+            i = j
+        one = two
+    yield j - i + 1, two
+
+
+# Small Effect Size: d = 0.2
+# Medium Effect Size: d = 0.5
+# Large Effect Size: d = 0.8
+# a lower value of Cohen’s d indicates the necessity of a larger
+# sample size and vice versa
+def cohen_d(group1, group2):
+    group1 = [x for x in group1 if (np.isnan(x) == False)]
+    group2 = [x for x in group2 if (np.isnan(x) == False)]
+    n1, n2 = len(group1), len(group2)
+    # calculate the variance of the samples
+    s1, s2 = np.var(group1, ddof=1), np.var(group2, ddof=1)
+    # calculate the pooled standard deviation
+    s = np.sqrt(((n1 - 1) * s1 + (n2 - 1) * s2) / (n1 + n2 - 2))
+    # calculate the means of the samples
+    u1, u2 = np.mean(group1), np.mean(group2)
+    # calculate the effect size
+    print(u1)
+    return (u1 - u2) / s
+
+
+solution = ["yes", "no", "no", "no", "no", "yes", "yes", "no", "no"]
+
+
+class ParticipantData:
+    # TODO: only consider those with experience SQL, Python >1 (store those sessionIDs who do not in an array)
+    def __init__(self, sessionID, demographics_id, treatment_group, experience_ROR, answers, times):
+        self.sessionID = sessionID
+        self.demographics_id = demographics_id
+        self.treatment_group = treatment_group
+        self.experience_ROR = experience_ROR
+        self.answers = answers
+        self.times = times
+
+    def get_avg_time(self):
+        return np.mean(self.times)
+
+    def get_correct_answer_score(self):
+        score = 0
+        zip_answers_solution = zip(solution, self.answers)
+        for answer_tuple in zip_answers_solution:
+            if answer_tuple[0] == answer_tuple[1]:
+                score += 1
+        return score
+
+
+def separate_cg_tg(all_participants):
+    tg = []
+    cg = []
+    if all_participants is not None:
+        for participant in all_participants:
+            if participant.treatment_group == 1:
+                tg.append(participant)
+            else:
+                cg.append(participant)
+
+    return tg, cg
+
+
+def get_times_as_array(participants):
+    times = []
+    for participant in participants:
+        times.append(participant.get_avg_time())
+    return times
+
+
+def getRQ1Data(all_participants):
+    tg, cg = separate_cg_tg(all_participants)
+    tg_times = get_times_as_array(tg)
+    cg_times = get_times_as_array(cg)
+    return tg_times, cg_times
+
+
+def get_all_answer_scores_as_array(participants):
+    avg_answers = []
+    for participant in participants:
+        avg_answers.append(participant.get_correct_answer_score())
+    return avg_answers
+
+
+def getRQ2Data(all_participants):
+    tg, cg = separate_cg_tg(all_participants)
+    tg_answer_scores = get_all_answer_scores_as_array(tg)
+    cg_answer_scores = get_all_answer_scores_as_array(cg)
+    return tg_answer_scores, cg_answer_scores
+
+
+def separate_experts_novice(all_participants):
+    experts = []
+    novice = []
+    for participant in all_participants:
+        if participant.experience_ROR < 1:
+            novice.append(participant)
+        else:
+            experts.append(participant)
+
+    return experts, novice
+    pass
+
+
+def getRQ3Data(all_participants):
+    experts, novices = separate_experts_novice(all_participants)
+    rq3_novices_rq1_tg, rq3_novices_rq1_cg = getRQ1Data(novices)
+    rq3_novices_rq2_tg, rq3_novices_rq2_cg = getRQ2Data(novices)
+    rq3_experts_rq1_tg, rq3_experts_rq1_cg = getRQ1Data(experts)
+    rq3_experts_rq2_tg, rq3_experts_rq2_cg = getRQ2Data(experts)
+
+    return rq3_novices_rq1_tg, rq3_novices_rq1_cg, rq3_novices_rq2_tg, rq3_novices_rq2_cg, \
+           rq3_experts_rq1_tg, rq3_experts_rq1_cg, rq3_experts_rq2_tg, rq3_experts_rq2_cg
+
+
+def get_dempgraphics_join_question_by_sessionID_string():
+    return 'SELECT Demographics.id as demographics_id, ' \
+           'Demographics.sessionID as sessionID, ' \
+           'Demographics.treatment_group as treatment_group, ' \
+           'Demographics.experience_ROR as experience_ROR, ' \
+           'Question.taskID as taskID, ' \
+           'Question.questionID as questionID, ' \
+           'Question.answer as answer, ' \
+           'Question.time as time ' \
+           'FROM Demographics INNER JOIN Question ON ' \
+           'Demographics.sessionID = Question.sessionID ' \
+           'WHERE Demographics.sessionID = ?' \
+           'ORDER BY questionID'
+    pass
+
+
+def get_participants_data():
+    participants = []
+    select_all_sessionIDs = "SELECT DISTINCT sessionID from Question"
+    join_Demographics_Question = get_dempgraphics_join_question_by_sessionID_string()
+
+    for row in cursor.execute(select_all_sessionIDs).fetchall():
+        treatment_group = 0
+        answers = []
+        times = []
+        demographics_id = 0
+        experience_ROR = 0
+        sessionID = row
+
+        for row2 in cursor.execute(join_Demographics_Question, row):
+            demographics_id = row2[0]
+            treatment_group = row2[2]
+            experience_ROR = row2[3]
+            answers.append(row2[6])
+            times.append(row2[7])
+
+        new_participant = ParticipantData(sessionID, demographics_id, treatment_group, experience_ROR, answers, times)
+        participants.append(new_participant)
+        # print("answer score: ")
+        # print(new_participant.get_correct_answer_score())
+        # print("avg time needed: ")
+        # print(new_participant.get_avg_time())
+        # print("")
+    return participants
+
+
+def get_statistics(tg, cg):
+    # Create a Dictionary of series
+    d = {'treatment_group': pd.Series(tg),
+         'control_group': pd.Series(cg)
+         }
+
+    # Create a DataFrame
+    df = pd.DataFrame(d)
+    summary = pd.concat([df.describe(), pd.DataFrame(df.median(), columns=["Median"]).T])
+
+    # # https://stackoverflow.com/questions/32137396/how-do-i-plot-only-a-table-in-matplotlib
+    # fig, ax = plt.subplots(figsize=(12, 4))
+    # ax.axis('tight')
+    # ax.axis('off')
+    # the_table = ax.table(cellText=df.values, colLabels=df.columns, loc='center')
+    #
+    # # https://stackoverflow.com/questions/4042192/reduce-left-and-right-margins-in-matplotlib-plot
+    # pp = PdfPages("foo.pdf")
+    # pp.savefig(fig, bbox_inches='tight')
+    # pp.close()
+
+    return summary
+
+
+def is_normal(data):
+    stat, p = shapiro(data)
+    print('Statistics=%.3f, p=%.3f' % (stat, p))
+
+    alpha = 0.05
+    if p > alpha:
+        print('Sample looks Gaussian (fail to reject H0)')
+        return True
+    else:
+        print('Sample does not look Gaussian (reject H0)')
+        return False
+    pass
+
+
+def perform_mann_whitney_u_test(data1, data2):
+    # Fail to Reject H0: Sample distributions are equal.
+    # Reject H0: Sample distributions are not equal.
+
+    # For the test to be effective, it requires at least 20 observations
+    # in each data sample
+
+    stat, p = mannwhitneyu(data1, data2)
+    print('Statistics=%.3f, p=%.3f' % (stat, p))
+    # interpret
+    alpha = 0.05
+    if p > alpha:
+        print('Same distribution (fail to reject H0); no difference in response time between the groups')
+        return False
+    else:
+        print('Different distribution (reject H0); there is a difference in response time between the groups')
+        return True
+    pass
+
+
+def perform_student_t_test(data1, data2):
+    stat, p = ttest_ind(data1, data2)
+    print('t=%.3f, p=%.3f' % (stat, p))
+    alpha = 0.05
+    if p > alpha:
+        print('Accept null hypothesis that the means are equal.')
+        return False
+    else:
+        print('Reject the null hypothesis that the means are equal.')
+        return True
+    pass
+
+
+def perform_significance_test(tg, cg):
+    overall = tg + cg
+    is_normal_distributed = is_normal(overall)
+
+    if is_normal_distributed:
+        # TODO if normal then t test else mann whitney u test (n < 30! https://www.statology.org/mann-whitney-u-test-python/)
+
+        return perform_mann_whitney_u_test(tg, cg)
+    else:
+        return perform_student_t_test(tg, cg)
+
+    pass
+
+
+def get_histogram(tg, cg, title, xlabel="", ylable='Density', filename="hist.png"):
+    n_bins = 20
+
+    sns.distplot(tg, kde=False, label='Treatment Group', bins=n_bins)
+    sns.distplot(cg, kde=False, label='Control Group', bins=n_bins)
+
+    # Plot formatting
+    plt.legend(prop={'size': 12})
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylable)
+    plt.savefig(filename)
+    plt.show()
+
+    # n_bins = 20
+    #
+    # colors = ['green', 'blue', 'lime']
+    #
+    # plt.hist(x, n_bins, density=True,
+    #          histtype='bar',
+    #          color=colors,
+    #          label=colors)
+    #
+    # plt.legend(prop={'size': 10})
+    #
+    # plt.title('matplotlib.pyplot.hist() function Example\n\n',
+    #           fontweight="bold")
+    #
+    # plt.show()
+    pass
+
+
+def get_all_histograms(rq1_tg, rq1_cg, rq2_tg, rq2_cg, rq3_novices_rq1_cg, rq3_novices_rq1_tg, rq3_novices_rq2_cg,
+                       rq3_novices_rq2_tg, rq3_experts_rq1_cg, rq3_experts_rq1_tg, rq3_experts_rq2_cg,
+                       rq3_experts_rq2_tg):
+    get_histogram(rq1_tg, rq1_cg, title="RQ1", xlabel="Time in seconds", ylable="Number of Participants",
+                  filename="hist_rq1.png")
+
+    get_histogram(rq2_tg, rq2_cg, title="RQ2", xlabel="Correct answers", ylable="Number of Participants",
+                  filename="hist_rq2.png")
+
+    get_histogram(rq3_novices_rq1_tg, rq3_novices_rq1_cg, title="RQ3 Time spent novice", xlabel="Time in seconds",
+                  ylable="Number of Participants",
+                  filename="hist_rq3_rq1_novice.png")
+
+    get_histogram(rq3_novices_rq2_tg, rq3_novices_rq2_cg, title="RQ3 Correct answers novice", xlabel="Correct answers",
+                  ylable="Number of Participants",
+                  filename="hist_rq3_rq2_novice.png")
+
+    get_histogram(rq3_experts_rq1_tg, rq3_experts_rq1_cg, title="RQ3 Time spent experts", xlabel="Time in seconds",
+                  ylable="Number of Participants",
+                  filename="hist_rq3_rq1_experts.png")
+
+    get_histogram(rq3_experts_rq2_tg, rq3_experts_rq2_cg, title="RQ3 Correct answers experts", xlabel="Correct answers",
+                  ylable="Number of Participants",
+                  filename="hist_rq3_rq2_experts.png")
+
+    pass
+
+
+def calc_statistics(rq1_tg, rq1_cg, rq2_tg, rq2_cg, rq3_novices_rq1_cg, rq3_novices_rq1_tg, rq3_novices_rq2_cg,
+                    rq3_novices_rq2_tg, rq3_experts_rq1_cg, rq3_experts_rq1_tg, rq3_experts_rq2_cg, rq3_experts_rq2_tg):
+    summary_statistics_rq1 = get_statistics(rq1_tg, rq1_cg)
+    summary_statistics_rq2 = get_statistics(rq2_tg, rq2_cg)
+    summary_statistics_rq3_novices_rq1 = get_statistics(rq3_novices_rq1_cg, rq3_novices_rq1_tg)
+    summary_statistics_rq3_novices_rq2 = get_statistics(rq3_novices_rq2_cg, rq3_novices_rq2_tg)
+    summary_statistics_rq3_experts_rq1 = get_statistics(rq3_experts_rq1_cg, rq3_experts_rq1_tg)
+    summary_statistics_rq3_experts_rq2 = get_statistics(rq3_experts_rq2_cg, rq3_experts_rq2_tg)
+
+    # get statistics as csv
+    summary_statistics_rq1.to_csv("summary_statistics_rq1.csv")
+    summary_statistics_rq2.to_csv("summary_statistics_rq2.csv")
+    summary_statistics_rq3_novices_rq1.to_csv("summary_statistics_rq3_novices_rq1.csv")
+    summary_statistics_rq3_novices_rq2.to_csv("summary_statistics_rq3_novices_rq2.csv")
+    summary_statistics_rq3_experts_rq1.to_csv("summary_statistics_rq3_experts_rq1.csv")
+    summary_statistics_rq3_experts_rq2.to_csv("summary_statistics_rq3_experts_rq2.csv")
+
+    # get histograms
+    get_all_histograms(rq1_tg, rq1_cg, rq2_tg, rq2_cg, rq3_novices_rq1_cg, rq3_novices_rq1_tg, rq3_novices_rq2_cg,
+                       rq3_novices_rq2_tg, rq3_experts_rq1_cg, rq3_experts_rq1_tg, rq3_experts_rq2_cg,
+                       rq3_experts_rq2_tg)
+
+    pass
+
+
+def calc_sample_size(effect):
+    alpha = 0.05
+    power = 0.4
+
+    analysis = TTestIndPower()
+    result = analysis.solve_power(effect, power=power, nobs1=None, ratio=1.0, alpha=alpha)
+    print('Sample Size: %.3f' % result)
+    return result
+
+
+def calc_effect_size(tg, cg):
+    overall = tg + cg
+    is_normal_distributed = is_normal(overall)
+
+    if is_normal_distributed:
+        return cohen_d(tg, cg)
+    else:
+        return cliffs_delta(tg, cg)
+
+    pass
+
+
+def get_sample_size(tg, cg):
+    effect = calc_effect_size(tg, cg)
+    sample_size = calc_sample_size(effect)
+    return sample_size
+
+
+def analysis():
+    # get data
+    all_participants = get_participants_data()
+    rq1_tg, rq1_cg = getRQ1Data(all_participants)
+    rq2_tg, rq2_cg = getRQ2Data(all_participants)
+    rq3_novices_rq1_tg, rq3_novices_rq1_cg, rq3_novices_rq2_tg, rq3_novices_rq2_cg, \
+    rq3_experts_rq1_tg, rq3_experts_rq1_cg, rq3_experts_rq2_tg, rq3_experts_rq2_cg = getRQ3Data(all_participants)
+
+    difference_in_time = perform_significance_test(rq1_tg, rq1_cg)
+    difference_in_correctness = perform_significance_test(rq2_tg, rq2_cg)
+
+    difference_in_time_novice = perform_significance_test(rq3_novices_rq1_tg, rq3_novices_rq1_cg)
+    difference_in_time_experts = perform_significance_test(rq3_experts_rq1_tg, rq3_experts_rq1_cg)
+    difference_in_correctness_novice = perform_significance_test(rq3_novices_rq2_tg, rq3_novices_rq2_cg)
+    difference_in_correctness_experts = perform_significance_test(rq3_experts_rq2_tg, rq3_experts_rq2_cg)
+
+    # get statistics
+    calc_statistics(rq1_tg, rq1_cg, rq2_tg, rq2_cg, rq3_novices_rq1_cg, rq3_novices_rq1_tg, rq3_novices_rq2_cg,
+                    rq3_novices_rq2_tg, rq3_experts_rq1_cg, rq3_experts_rq1_tg, rq3_experts_rq2_cg, rq3_experts_rq2_tg)
+
+    sample_size_rq1 = get_sample_size(rq1_tg, rq1_cg)
+    sample_size_rq2 = get_sample_size(rq2_tg, rq2_cg)
+    sample_size_rq3_novices_rq1 = get_sample_size(rq3_novices_rq1_tg, rq3_novices_rq1_cg)
+    sample_size_rq3_novices_rq2 = get_sample_size(rq3_novices_rq2_tg, rq3_novices_rq2_cg)
+    sample_size_rq3_experst_rq1 = get_sample_size(rq3_experts_rq1_tg, rq3_experts_rq1_cg)
+    sample_size_rq3_experst_rq2 = get_sample_size(rq3_experts_rq2_tg, rq3_experts_rq2_cg)
+
+    # fig = ff.create_table(summary_statistics_rq1)
+    # fig.update_layout(
+    #     autosize=False,
+    #     width=500,
+    #     height=200,
+    # )
+    # fig.write_image("table_plotly.png", scale=2)
+    # fig.show()
+
+    # # create a subplot without frame
+    # plot = plt.subplot(111, frame_on=False)
+    #
+    # # remove axis
+    # plot.xaxis.set_visible(False)
+    # plot.yaxis.set_visible(False)
+    # table(plot, summary_statistics_rq1, loc='upper right')
+    #
+    # # save the plot as a png file
+    # plt.savefig('summary_statistics_rq1.png')
+    # plt.show()
+
+
+analysis()
+
+# if __name__ == '__main__':
+#     conn = sqlite3.connect('surveyDa/ta.sqlite')
+#     table = pd.read_sql_query("SELECT * from Demographics", conn)
+#     print(table)
+#     cursor = conn.cursor()
+#     print(cursor.execute("""SELECT * FROM sqlite_master;""").fetchall())
