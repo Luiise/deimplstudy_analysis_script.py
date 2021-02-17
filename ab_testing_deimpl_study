@@ -13,6 +13,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import plotly.figure_factory as ff
 from scipy.stats import shapiro
 from scipy.stats import mannwhitneyu
+from scipy.stats import fisher_exact
 from statsmodels.stats.power import TTestIndPower
 
 import sqlite3
@@ -230,12 +231,38 @@ def cohen_d(group1, group2):
 solution = ["yes", "no", "no", "no", "no", "yes", "yes", "no", "no"]
 
 
+def divide_answer_choices(answers, correct_answer):
+    amount_correctly_answered = 0
+    amount_wrongly_answered = 0
+    for answer in answers:
+        if answer == correct_answer:
+            amount_correctly_answered = amount_correctly_answered + 1
+        else:
+            amount_wrongly_answered = amount_wrongly_answered + 1
+
+    return amount_correctly_answered, amount_wrongly_answered
+
+
+def perform_significance_test_for_binary_data(tg, cg, task_id, solution):
+    # yes    #no
+    # tg     #yes     #no
+    # cg     #yes     #no
+    cg_correctly_answered, cg_wrongly_answered = divide_answer_choices(cg, solution)
+    tg_correctly_answered, tg_wrongly_answered = divide_answer_choices(tg, solution)
+    oddsratio, pvalue = fisher_exact(
+        [[cg_correctly_answered, cg_wrongly_answered], [tg_correctly_answered, tg_wrongly_answered]],
+        alternative="less")
+    return test_result_correctness_summary(oddsratio=oddsratio, p=pvalue, task_id=task_id)
+
+    pass
+
+
 class Task:
-    def __init__(self, task_id, times_tg=None, times_cg=None, answers_tg=None,
+    def __init__(self, task_id, solution, times_tg=None, times_cg=None, answers_tg=None,
                  answers_cg=None, time_cg_novices=None, time_tg_novices=None, answers_cg_novices=None,
                  answers_tg_novices=None, time_cg_experts=None, time_tg_experts=None, answers_cg_experts=None,
                  answers_tg_experts=None):
-
+        self.solution = solution
         if answers_cg_experts is None:
             self.answers_cg_experts = []
         else:
@@ -307,10 +334,11 @@ class Task:
         return perform_significance_test(tg=self.times_tg, cg=self.times_cg, task_id=self.task_Id)
 
     def get_general_difference_in_correctness(self):
-        return perform_significance_test(tg=self.answers_tg, cg=self.answers_cg, task_id=self.task_Id)
+        return perform_significance_test_for_binary_data(tg=self.answers_tg, cg=self.answers_cg, task_id=self.task_Id,
+                                                         solution=self.solution)
 
     def get_experts_difference_in_time(self):
-        return perform_significance_test(tg=self.time_tg_experts, cg=self.time_cg_experts,task_id=self.task_Id)
+        return perform_significance_test(tg=self.time_tg_experts, cg=self.time_cg_experts, task_id=self.task_Id)
 
     def get_experts_difference_in_correctness(self):
         return perform_significance_test(tg=self.answers_tg_experts, cg=self.answers_cg_experts, task_id=self.task_Id)
@@ -373,21 +401,22 @@ class Task:
 def get_init_tasks(task_solutions):
     tasks = []
     for i in range(len(task_solutions)):
-        tasks.append(Task(task_id=(i + 1)))
+        task_id = i + 1
+        tasks.append(Task(task_id=task_id, solution=task_solutions[task_id]))
     return tasks
 
 
 def get_task_solutions():
     return {
-        "1": "yes",
-        "2": "no",
-        "3": "no",
-        "4": "no",
-        "5": "no",
-        "6": "yes",
-        "7": "yes",
-        "8": "no",
-        "9": "no"
+        1: "yes",
+        2: "no",
+        3: "no",
+        4: "no",
+        5: "no",
+        6: "yes",
+        7: "yes",
+        8: "no",
+        9: "no"
     }
     # return {
     #     "1": "no",
@@ -560,7 +589,7 @@ def is_normal(data):
     pass
 
 
-def test_result_summary(stat, p, alpha=0.05, task_id=0):
+def test_result_correctness_summary(oddsratio, p, alpha=0.05, task_id=0):
     is_different = False
     if p > alpha:
         print('Same distribution (fail to reject H0); no difference in response time between the groups')
@@ -568,8 +597,18 @@ def test_result_summary(stat, p, alpha=0.05, task_id=0):
     else:
         print('Different distribution (reject H0); there is a difference in response time between the groups')
         is_different = True
-        return True
+    return {"task_id": task_id, "oddsratio": oddsratio, "p": p, "is_different": is_different}
     pass
+
+
+def test_result_time_summary(stat, p, alpha=0.05, task_id=0):
+    is_different = False
+    if p > alpha:
+        print('Same distribution (fail to reject H0); no difference in response time between the groups')
+        is_different = False
+    else:
+        print('Different distribution (reject H0); there is a difference in response time between the groups')
+        is_different = True
     return {"task_id": task_id, "stat": stat, "p": p, "is_different": is_different}
     pass
 
@@ -581,7 +620,7 @@ def perform_mann_whitney_u_test(data1, data2, task_id=0):
     stat, p = mannwhitneyu(x=data1, y=data2, alternative="less")
     print('Statistics=%.3f, p=%.3f' % (stat, p))
     # interpret
-    return test_result_summary(stat=stat, p=p, task_id=task_id)
+    return test_result_time_summary(stat=stat, p=p, task_id=task_id)
     # alpha = 0.05
     # if p > alpha:
     #     print('Same distribution (fail to reject H0); no difference in response time between the groups')
@@ -596,7 +635,7 @@ def perform_student_t_test(data1, data2, task_id=0):
     stat, p = ttest_ind(a=data1, b=data2, alternative="less")
     print('t=%.3f, p=%.3f' % (stat, p))
 
-    return test_result_summary(stat=stat, p=p, task_id=task_id)
+    return test_result_time_summary(stat=stat, p=p, task_id=task_id)
     # alpha = 0.05
     # if p > alpha:
     #     print('Accept null hypothesis that the means are equal.')
@@ -717,7 +756,16 @@ def get_sample_size(tg, cg):
     return sample_size
 
 
-def write_to_csv(results, filename):
+def write_test_correctness_to_csv(results, filename):
+    with open(filename, 'w', ) as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['Task Id', 'Odds Ratio', "P-Value", "Is Significant Different"])
+        for result in results:
+            writer.writerow([result['task_id'], result['oddsratio'], result['p'], result['is_different']])
+    pass
+
+
+def write_test_time_to_csv(results, filename):
     with open(filename, 'w', ) as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(['Task Id', 'T-Statistics', "P-Value", "Is Significant Different"])
@@ -730,15 +778,17 @@ def perform_rq1_for_each_task():
     test_results = []
     for task in tasks:
         test_results.append(task.get_general_difference_in_time())
-    write_to_csv(results=test_results, filename="test_results_general_difference_in_time.csv")
+    write_test_time_to_csv(results=test_results, filename="test_results_general_difference_in_time.csv")
     pass
+
 
 def perform_rq2_for_each_task():
     test_results = []
     for task in tasks:
-        test_results.append(task.get_experts_difference_in_correctness())
-    write_to_csv(results=test_results, filename="test_results_general_difference_in_correctness.csv")
+        test_results.append(task.get_general_difference_in_correctness())
+    write_test_correctness_to_csv(results=test_results, filename="test_results_general_difference_in_correctness.csv")
     pass
+
 
 def init_all_tasks():
     sql_query = "select treatment_group, experience_ROR, answer, time, questionID, D.sessionID " \
@@ -772,9 +822,6 @@ def init_all_tasks():
         qId[0] = qId[0] + 1
 
     pass
-
-
-
 
 
 def analysis():
