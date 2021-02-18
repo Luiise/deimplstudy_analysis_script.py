@@ -157,7 +157,7 @@ cursor = conn.cursor()
 #
 # pm.plot_posterior(
 #     trace,
-#     var_names=["difference of means", "difference of stds", "effect size"],
+#     var_names=["difference of means", "difference of st\ds", "effect size"],
 #     ref_val=0,
 #     color="#87ceeb",
 # )
@@ -341,13 +341,15 @@ class Task:
         return perform_significance_test(tg=self.time_tg_experts, cg=self.time_cg_experts, task_id=self.task_Id)
 
     def get_experts_difference_in_correctness(self):
-        return perform_significance_test(tg=self.answers_tg_experts, cg=self.answers_cg_experts, task_id=self.task_Id)
+        return perform_significance_test_for_binary_data(tg=self.answers_tg_experts, cg=self.answers_cg_experts,
+                                                         task_id=self.task_Id, solution=self.solution)
 
     def get_novices_difference_in_time(self):
         return perform_significance_test(tg=self.time_tg_novices, cg=self.time_cg_novices, task_id=self.task_Id)
 
     def get_novices_difference_in_correctness(self):
-        return perform_significance_test(tg=self.answers_tg_novices, cg=self.answers_cg_novices, task_id=self.task_Id)
+        return perform_significance_test_for_binary_data(tg=self.answers_tg_novices, cg=self.answers_cg_novices,
+                                                         task_id=self.task_Id, solution=self.solution)
 
     def do_descriptive_statistics(self):
         self.__get_descriptive_statistics(self, cg=self.times_cg, tg=self.times_tg, filename="rq1",
@@ -782,11 +784,45 @@ def perform_rq1_for_each_task():
     pass
 
 
-def perform_rq2_for_each_task():
+def perform_general_difference_in_correctness_for_each_task():
     test_results = []
     for task in tasks:
         test_results.append(task.get_general_difference_in_correctness())
     write_test_correctness_to_csv(results=test_results, filename="test_results_general_difference_in_correctness.csv")
+    pass
+
+
+def perform_novices_difference_in_time_for_each_task():
+    test_results = []
+    for task in tasks:
+        test_results.append(task.get_novices_difference_in_time())
+    write_test_time_to_csv(results=test_results, filename="test_results_novices_difference_in_time.csv")
+    pass
+
+
+def perform_experts_difference_in_time_for_each_task():
+    test_results = []
+    for task in tasks:
+        test_results.append(task.get_experts_difference_in_time())
+    write_test_time_to_csv(results=test_results, filename="test_results_experts_difference_in_time.csv")
+    pass
+
+
+def perform_novices_difference_in_correctness_for_each_task():
+    test_results = []
+    for task in tasks:
+        test_results.append(task.get_novices_difference_in_correctness())
+    write_test_correctness_to_csv(results=test_results,
+                                  filename="test_results_novices_difference_in_correctness.csv")
+    pass
+
+
+def perform_experts_difference_in_correctness_for_each_task():
+    test_results = []
+    for task in tasks:
+        test_results.append(task.get_experts_difference_in_correctness())
+    write_test_correctness_to_csv(results=test_results,
+                                  filename="test_results_experts_difference_in_correctness.csv")
     pass
 
 
@@ -834,9 +870,23 @@ def analysis():
 
     init_all_tasks()
 
+    # rq1
     perform_rq1_for_each_task()
 
-    perform_rq2_for_each_task()
+    # rq2
+    perform_general_difference_in_correctness_for_each_task()
+
+    # rq3 novices rq1
+    perform_novices_difference_in_time_for_each_task()
+
+    # rq3 novices rq2
+    perform_novices_difference_in_correctness_for_each_task()
+
+    # rq3 experts rq1
+    perform_experts_difference_in_time_for_each_task()
+
+    # rq3 experts rq2
+    perform_experts_difference_in_correctness_for_each_task()
 
     difference_in_time = perform_significance_test(rq1_tg, rq1_cg)
     difference_in_correctness = perform_significance_test(rq2_tg, rq2_cg)
