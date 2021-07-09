@@ -14,6 +14,7 @@ import plotly.figure_factory as ff
 from scipy.stats import shapiro
 from scipy.stats import mannwhitneyu
 from scipy.stats import fisher_exact
+from scipy.stats import chi2_contingency
 from statsmodels.stats.power import TTestIndPower
 
 import sqlite3
@@ -22,7 +23,7 @@ sns.set(color_codes=True)
 from scipy.stats import ttest_ind
 import sys
 
-conn = sqlite3.connect('databaseSQLite.sqlite')
+conn = sqlite3.connect('db4.sqlite')
 cursor = conn.cursor()
 
 
@@ -181,8 +182,8 @@ def cliffs_delta(lst1, lst2, **dull):
             j += 1
         less += (n - j) * repeats
     d = (more - less) / (m * n)
-    size = lookup_size(d, dull)
-    return d, size
+    # size = lookup_size(d, dull)
+    return d
 
 
 def lookup_size(delta: float, dull: dict) -> str:
@@ -228,7 +229,7 @@ def cohen_d(group1, group2):
     return (u1 - u2) / s
 
 
-solution = ["yes", "no", "no", "no", "no", "yes", "yes", "no", "no"]
+solution = ["no", "yes", "yes", "no", "yes", "yes", "no", "no"]
 
 
 def divide_answer_choices(answers, correct_answer):
@@ -243,15 +244,19 @@ def divide_answer_choices(answers, correct_answer):
     return amount_correctly_answered, amount_wrongly_answered
 
 
+def get_contingency_table(tg, cg, solution):
+    cg_correctly_answered, cg_wrongly_answered = divide_answer_choices(cg, solution)
+    tg_correctly_answered, tg_wrongly_answered = divide_answer_choices(tg, solution)
+    return [[cg_correctly_answered, cg_wrongly_answered], [tg_correctly_answered, tg_wrongly_answered]]
+    pass
+
+
 def perform_significance_test_for_binary_data(tg, cg, task_id, solution):
     # yes    #no
     # tg     #yes     #no
     # cg     #yes     #no
-    cg_correctly_answered, cg_wrongly_answered = divide_answer_choices(cg, solution)
-    tg_correctly_answered, tg_wrongly_answered = divide_answer_choices(tg, solution)
-    oddsratio, pvalue = fisher_exact(
-        [[cg_correctly_answered, cg_wrongly_answered], [tg_correctly_answered, tg_wrongly_answered]],
-        alternative="less")
+    contingency_table = get_contingency_table(tg, cg, solution)
+    oddsratio, pvalue = fisher_exact(contingency_table, alternative="less")
     return test_result_correctness_summary(oddsratio=oddsratio, p=pvalue, task_id=task_id)
 
     pass
@@ -261,8 +266,77 @@ class Task:
     def __init__(self, task_id, solution, times_tg=None, times_cg=None, answers_tg=None,
                  answers_cg=None, time_cg_novices=None, time_tg_novices=None, answers_cg_novices=None,
                  answers_tg_novices=None, time_cg_experts=None, time_tg_experts=None, answers_cg_experts=None,
-                 answers_tg_experts=None):
+                 answers_tg_experts=None, times_cg_correct=None, times_tg_correct=None, time_cg_novices_correct=None,
+                 time_tg_novices_correct=None, time_tg_experts_correct=None, time_cg_experts_correct=None,
+                 answers_cg_novices_correct=None,
+                 answers_tg_novices_correct=None,
+                 answers_tg_correct=None,
+                 answers_cg_correct=None,
+                 answers_cg_experts_correct=None,
+                 answers_tg_experts_correct=None
+                 ):
         self.solution = solution
+
+        if answers_cg_experts_correct is None:
+            self.answers_cg_experts_correct = []
+        else:
+            self.answers_cg_experts_correct = answers_cg_experts_correct
+
+        if answers_tg_experts_correct is None:
+            self.answers_tg_experts_correct = []
+        else:
+            self.answers_tg_experts_correct = answers_tg_experts_correct
+
+        if answers_cg_correct is None:
+            self.answers_cg_correct = []
+        else:
+            self.answers_cg_correct = answers_cg_correct
+
+        if answers_tg_correct is None:
+            self.answers_tg_correct = []
+        else:
+            self.answers_tg_correct = answers_tg_correct
+
+        if answers_tg_novices_correct is None:
+            self.answers_tg_novices_correct = []
+        else:
+            self.answers_tg_novices_correct = answers_tg_novices_correct
+
+        if answers_cg_novices_correct is None:
+            self.answers_cg_novices_correct = []
+        else:
+            self.answers_cg_novices_correct = answers_cg_novices_correct
+
+        if time_tg_experts_correct is None:
+            self.times_tg_experts_correct = []
+        else:
+            self.times_tg_experts_correct = time_tg_experts_correct
+
+        if time_cg_experts_correct is None:
+            self.times_cg_experts_correct = []
+        else:
+            self.times_cg_experts_correct = time_cg_experts_correct
+
+        if times_tg_correct is None:
+            self.times_tg_correct = []
+        else:
+            self.times_tg_correct = times_tg_correct
+
+        if time_cg_novices_correct is None:
+            self.times_cg_novices_correct = []
+        else:
+            self.times_cg_novices_correct = time_cg_novices_correct
+
+        if time_tg_novices_correct is None:
+            self.times_tg_novices_correct = []
+        else:
+            self.times_tg_novices_correct = time_tg_novices_correct
+
+        if times_cg_correct is None:
+            self.times_cg_correct = []
+        else:
+            self.times_cg_correct = times_cg_correct
+
         if answers_cg_experts is None:
             self.answers_cg_experts = []
         else:
@@ -333,12 +407,19 @@ class Task:
     def get_general_difference_in_time(self):
         return perform_significance_test(tg=self.times_tg, cg=self.times_cg, task_id=self.task_Id)
 
+    def get_general_difference_in_time_only_correct_answers(self):
+        return perform_significance_test(tg=self.times_tg_correct, cg=self.times_cg_correct, task_id=self.task_Id)
+
     def get_general_difference_in_correctness(self):
         return perform_significance_test_for_binary_data(tg=self.answers_tg, cg=self.answers_cg, task_id=self.task_Id,
                                                          solution=self.solution)
 
     def get_experts_difference_in_time(self):
         return perform_significance_test(tg=self.time_tg_experts, cg=self.time_cg_experts, task_id=self.task_Id)
+
+    def get_experts_difference_in_time_only_correct_answers(self):
+        return perform_significance_test(tg=self.times_tg_experts_correct, cg=self.times_cg_experts_correct,
+                                         task_id=self.task_Id)
 
     def get_experts_difference_in_correctness(self):
         return perform_significance_test_for_binary_data(tg=self.answers_tg_experts, cg=self.answers_cg_experts,
@@ -347,13 +428,21 @@ class Task:
     def get_novices_difference_in_time(self):
         return perform_significance_test(tg=self.time_tg_novices, cg=self.time_cg_novices, task_id=self.task_Id)
 
+    def get_novices_difference_in_time_only_correct_answers(self):
+        return perform_significance_test(tg=self.times_tg_novices_correct, cg=self.times_cg_novices_correct,
+                                         task_id=self.task_Id)
+
     def get_novices_difference_in_correctness(self):
         return perform_significance_test_for_binary_data(tg=self.answers_tg_novices, cg=self.answers_cg_novices,
                                                          task_id=self.task_Id, solution=self.solution)
 
     def do_descriptive_statistics(self):
         self.__get_descriptive_statistics(self, cg=self.times_cg, tg=self.times_tg, filename="rq1",
-                                          title_hist="Time needed", xlabel_hist="Time in sec",
+                                          title_hist="Time needed overall", xlabel_hist="Time in sec",
+                                          ylabel_hist="Number of participants")
+        self.__get_descriptive_statistics(self, cg=self.times_cg_correct, tg=self.times_tg_correct,
+                                          filename="rq1_only_correct_answers",
+                                          title_hist="Time needed overall", xlabel_hist="Time in sec",
                                           ylabel_hist="Number of participants")
         self.__get_descriptive_statistics(self, cg=self.answers_cg, tg=self.answers_tg, filename="rq2",
                                           title_hist="Correctly solved tasks",
@@ -363,8 +452,16 @@ class Task:
                                           filename="rq3_rq1_novices",
                                           title_hist="Time needed", xlabel_hist="Time in sec",
                                           ylabel_hist="Number of participants")
+        self.__get_descriptive_statistics(self, cg=self.times_cg_novices_correct, tg=self.times_tg_novices_correct,
+                                          filename="rq3_rq1_novices_only_correct_answers",
+                                          title_hist="Time needed", xlabel_hist="Time in sec",
+                                          ylabel_hist="Number of participants")
         self.__get_descriptive_statistics(self, cg=self.time_cg_experts, tg=self.time_tg_experts,
                                           filename="rq3_rq1_experts",
+                                          title_hist="Time needed", xlabel_hist="Time in sec",
+                                          ylabel_hist="Number of participants")
+        self.__get_descriptive_statistics(self, cg=self.times_cg_experts_correct, tg=self.times_tg_experts_correct,
+                                          filename="rq3_rq1_experts_only_correct_answers",
                                           title_hist="Time needed", xlabel_hist="Time in sec",
                                           ylabel_hist="Number of participants")
         self.__get_descriptive_statistics(self, cg=self.answers_cg_novices, tg=self.answers_tg_novices,
@@ -408,17 +505,55 @@ def get_init_tasks(task_solutions):
     return tasks
 
 
+class Question:
+    def __init__(self, id, solution):
+        self.id = id
+        self.solution = solution
+
+
+task_demo = Question(0, "yes")
+task_1 = Question(1, "no")
+task_2 = Question(2, "yes")
+task_3 = Question(3, "yes")
+task_4 = Question(4, "no")
+task_5 = Question(5, "yes")
+task_6 = Question(6, "yes")
+task_7 = Question(7, "no")
+task_8 = Question(8, "no")
+
+
+def get_questions_with_solution():
+    tasks = []
+    tasks.append(task_1)
+    tasks.append(task_2)
+    tasks.append(task_3)
+    tasks.append(task_4)
+    tasks.append(task_5)
+    tasks.append(task_6)
+    tasks.append(task_7)
+    tasks.append(task_8)
+
+
+task_1 = Question(1, "no")
+task_2 = Question(2, "yes")
+task_3 = Question(3, "yes")
+task_4 = Question(4, "no")
+task_5 = Question(5, "yes")
+task_6 = Question(6, "yes")
+task_7 = Question(7, "no")
+task_8 = Question(8, "no")
+
+
 def get_task_solutions():
     return {
-        1: "yes",
-        2: "no",
-        3: "no",
+        1: "no",
+        2: "yes",
+        3: "yes",
         4: "no",
-        5: "no",
+        5: "yes",
         6: "yes",
-        7: "yes",
-        8: "no",
-        9: "no"
+        7: "no",
+        8: "no"
     }
     # return {
     #     "1": "no",
@@ -440,6 +575,14 @@ class ParticipantData:
         self.experience_ROR = experience_ROR
         self.answers = answers
         self.times = times
+
+    # def __init__(self, sessionID, demographics_id, treatment_group, experience_ROR, answers, times):
+    #     self.sessionID = sessionID
+    #     self.demographics_id = demographics_id
+    #     self.treatment_group = treatment_group
+    #     self.experience_ROR = experience_ROR
+    #     self.answers = answers
+    #     self.times = times
 
     def get_avg_time(self):
         return np.mean(self.times)
@@ -466,11 +609,32 @@ def separate_cg_tg(all_participants):
     return tg, cg
 
 
+def get_avg_times_of_participants(participants):
+    times = []
+    for participant in participants:
+        times.append(participant.get_avg_time())
+    return times
+
+
+def get_avg_times_correctly_solved_of_participants(participants):
+    times = []
+    for participant in participants:
+        times.append(participant.get_avg_time_correct_ones_only())
+    return times
+
+
 def get_times_as_array(participants):
     times = []
     for participant in participants:
         times.append(participant.get_avg_time())
     return times
+
+
+def get_rq1_data_only_correct(all_participants):
+    tg, cg = separate_cg_tg(all_participants)
+    tg_times = get_avg_times_correctly_solved_of_participants(tg)
+    cg_times = get_avg_times_correctly_solved_of_participants(cg)
+    return tg_times, cg_times
 
 
 def get_rq1_data(all_participants):
@@ -498,7 +662,7 @@ def separate_experts_novice(all_participants):
     experts = []
     novice = []
     for participant in all_participants:
-        if participant.experience_ROR < 1:
+        if participant.experience_RoR < 1:
             novice.append(participant)
         else:
             experts.append(participant)
@@ -510,12 +674,188 @@ def separate_experts_novice(all_participants):
 def get_rq3_data(all_participants):
     experts, novices = separate_experts_novice(all_participants)
     rq3_novices_rq1_tg, rq3_novices_rq1_cg = get_rq1_data(novices)
+    rq3_novices_rq1_only_correct_tg, rq3_novices_rq1_only_correct_cg = get_rq1_data_only_correct(novices)  ##
     rq3_novices_rq2_tg, rq3_novices_rq2_cg = get_rq2_data(novices)
     rq3_experts_rq1_tg, rq3_experts_rq1_cg = get_rq1_data(experts)
+    rq3_experts_rq1_only_correct_tg, rq3_experts_rq1_only_correct_cg = get_rq1_data_only_correct(experts)  ##
     rq3_experts_rq2_tg, rq3_experts_rq2_cg = get_rq2_data(experts)
 
     return rq3_novices_rq1_tg, rq3_novices_rq1_cg, rq3_novices_rq2_tg, rq3_novices_rq2_cg, \
-           rq3_experts_rq1_tg, rq3_experts_rq1_cg, rq3_experts_rq2_tg, rq3_experts_rq2_cg
+           rq3_experts_rq1_tg, rq3_experts_rq1_cg, rq3_experts_rq2_tg, rq3_experts_rq2_cg, \
+           rq3_novices_rq1_only_correct_tg, rq3_novices_rq1_only_correct_cg, \
+           rq3_experts_rq1_only_correct_tg, rq3_experts_rq1_only_correct_cg
+
+
+def get_dempgraphics_join_question_by_sessionID_string1():
+    return 'SELECT Demographics.id as demographics_id, ' \
+           'Demographics.sessionID as sessionID, ' \
+           'Demographics.treatment_group as treatment_group, ' \
+           'Demographics.experience_Programming_Total as experience_programming_total, ' \
+           'Demographics.experience_Programming_Employment as experience_programming_employment, ' \
+           'Demographics.comfortPython as comfort_python, ' \
+           'Demographics.comfortRoR as comfort_RoR, ' \
+           'Demographics.experience_ROR as experience_RoR, ' \
+           'Demographics.experience_Python as experience_python, ' \
+           'Demographics.experience_SQL as experience_sql, ' \
+           'Demographics.experience_MVC as experience_mvc, ' \
+           'Demographics.similar_frameworks as similar_frameworks, ' \
+           'Question.questionID as questionID, ' \
+           'Question.answer as answer, ' \
+           'Question.time as time,' \
+           'Question.taskNr as taskNr, ' \
+           'Question.justification_file1 as justification_file1, ' \
+           'Question.justification_lineNumber1 as justification_lineNumber1, ' \
+           'Question.justification_file2 as justification_file2, ' \
+           'Question.justification_lineNumber2 as justification_lineNumber2 ' \
+           'FROM Demographics INNER JOIN Question ON ' \
+           'Demographics.sessionID = Question.sessionID ' \
+           'WHERE Demographics.sessionID = ? ' \
+           'ORDER BY questionID'
+    pass
+
+
+def convert_sqlite_to_csv():
+    print("in convert_sqlite_to_csv")
+    select_all_sessionIDs = "SELECT DISTINCT sessionID from Question"
+    join_Demographics_Question = get_dempgraphics_join_question_by_sessionID_string1()
+
+    write_header = 1
+    for row in cursor.execute(select_all_sessionIDs).fetchall():
+        temp = cursor.execute(join_Demographics_Question, row)
+        fp = open('sqliteToCsv1.csv', 'a', newline='')
+        myFile = csv.writer(fp)
+        if write_header == 1:
+            header = [i[0] for i in cursor.description]
+            myFile.writerow(header)
+            write_header = 2
+        rows = temp.fetchall()
+        myFile.writerows(rows)
+        fp.close()
+
+
+class Participant:
+
+    def __init__(self, current_sessionID, treatment_group, experience_programming_total,
+                 experience_programming_employment, comfort_python, comfort_RoR,
+                 experience_RoR, experience_python, experience_sql, experience_mvc,
+                 similar_frameworks, all_answers_as_array, all_times_as_array,
+                 taskNr_as_array,
+                 correct_times_as_array, correct_answers_as_array):
+        self.current_sessionID = current_sessionID
+        self.treatment_group = treatment_group
+        self.experience_programming_total = experience_programming_total
+        self.experience_programming_employment = experience_programming_employment
+        self.comfort_python = comfort_python
+        self.comfort_RoR = comfort_RoR
+        self.experience_RoR = experience_RoR
+        self.experience_python = experience_python
+        self.experience_sql = experience_sql
+        self.experience_mvc = experience_mvc
+        self.similar_frameworks = similar_frameworks
+        self.all_answers_as_array = all_answers_as_array
+        self.all_times_as_array = all_times_as_array
+        self.taskNr_as_array = taskNr_as_array
+        self.correct_times_as_array = correct_times_as_array
+        self.correct_answers_as_array = correct_answers_as_array
+
+    def get_avg_time(self):
+        return np.mean(self.all_times_as_array)
+
+    def get_avg_time_correct_ones_only(self):
+        return np.mean(self.correct_times_as_array)
+
+    def get_correct_answer_score(self):
+        return len(self.correct_answers_as_array)
+
+
+def convert_csv_data_to_participant():
+    # discard demo answer
+    participants = []
+    read_header = 1
+    previous_sessionID = 0
+    all_answers_as_array = []
+    all_times_as_array = []
+    evaluation_as_array = []
+    taskNr_as_array = []
+    correct_answers_as_array = []
+    correct_times_as_array = []
+    treatment_group = 0
+    experience_programming_total = 0
+    experience_programming_employment = 0
+    comfort_python = 0
+    comfort_RoR = 0
+    experience_RoR = 0
+    experience_python = 0
+    experience_sql = 0
+    experience_mvc = 0
+    similar_frameworks = 0
+
+    fp = open('dataWithEval1.csv', 'r')
+    csv_reader = csv.reader(fp)
+    for row in csv_reader:
+        if read_header == 1:
+            print(f'Column names are {", ".join(row)}')
+            read_header = 2
+        else:
+            current_sessionID = row[1]
+            if (previous_sessionID == current_sessionID):
+                # case !new participant
+                treatment_group = float(row[2])
+                experience_programming_total = float(row[3])
+                experience_programming_employment = float(row[4])
+                comfort_python = float(row[5])
+                comfort_RoR = float(row[6])
+                experience_RoR = float(row[7])
+                experience_python = float(row[8])
+                experience_sql = row[9]
+                experience_mvc = row[10]
+                similar_frameworks = row[11]
+                question_id = float(row[12])
+                # only consider non demo tasks answers and times
+                if question_id != 0:
+                    all_answers_as_array.append(row[13])
+                    all_times_as_array.append(float(row[14]))
+                    taskNr_as_array.append(float(row[15]))
+                    evaluation_as_array.append(float(row[20]))
+                    # handle only correctly answered tasks
+                    if row[20] == '1':
+                        correct_answers_as_array.append(
+                            float(question_id))  # store questionID of task that has been answered correctly
+                        correct_times_as_array.append(float(row[14]))
+            else:
+                if previous_sessionID != 0:
+                    # not first participant
+                    new_participant = Participant(previous_sessionID, treatment_group, experience_programming_total,
+                                                  experience_programming_employment, comfort_python, comfort_RoR,
+                                                  experience_RoR, experience_python, experience_sql, experience_mvc,
+                                                  similar_frameworks, all_answers_as_array, all_times_as_array,
+                                                  taskNr_as_array,
+                                                  correct_times_as_array, correct_answers_as_array)
+                    participants.append(new_participant)
+                    all_answers_as_array = []
+                    all_times_as_array = []
+                    evaluation_as_array = []
+                    taskNr_as_array = []
+                    correct_answers_as_array = []
+                    correct_times_as_array = []
+                    previous_sessionID = current_sessionID
+
+                else:
+                    # first participant -> set previous_sessionID as current one
+                    previous_sessionID = current_sessionID
+
+    # add last participant
+    new_participant = Participant(previous_sessionID, treatment_group, experience_programming_total,
+                                  experience_programming_employment, comfort_python, comfort_RoR,
+                                  experience_RoR, experience_python, experience_sql, experience_mvc,
+                                  similar_frameworks, all_answers_as_array, all_times_as_array,
+                                  taskNr_as_array,
+                                  correct_times_as_array, correct_answers_as_array)
+    participants.append(new_participant)
+
+    return participants
+
+    # always store previous sessionsID so we know once there arrived a new one
 
 
 def get_dempgraphics_join_question_by_sessionID_string():
@@ -530,7 +870,7 @@ def get_dempgraphics_join_question_by_sessionID_string():
            'FROM Demographics INNER JOIN Question ON ' \
            'Demographics.sessionID = Question.sessionID ' \
            'WHERE Demographics.sessionID = ? ' \
-           'ORDER BY questionID'
+        # 'ORDER BY questionID'
     pass
 
 
@@ -592,7 +932,6 @@ def is_normal(data):
 
 
 def test_result_correctness_summary(oddsratio, p, alpha=0.05, task_id=0):
-    is_different = False
     if p > alpha:
         print('Same distribution (fail to reject H0); no difference in response time between the groups')
         is_different = False
@@ -604,7 +943,6 @@ def test_result_correctness_summary(oddsratio, p, alpha=0.05, task_id=0):
 
 
 def test_result_time_summary(stat, p, alpha=0.05, task_id=0):
-    is_different = False
     if p > alpha:
         print('Same distribution (fail to reject H0); no difference in response time between the groups')
         is_different = False
@@ -638,13 +976,6 @@ def perform_student_t_test(data1, data2, task_id=0):
     print('t=%.3f, p=%.3f' % (stat, p))
 
     return test_result_time_summary(stat=stat, p=p, task_id=task_id)
-    # alpha = 0.05
-    # if p > alpha:
-    #     print('Accept null hypothesis that the means are equal.')
-    #     return False
-    # else:
-    #     print('Reject the null hypothesis that the means are equal.')
-    #     return True
     pass
 
 
@@ -677,18 +1008,33 @@ def get_histogram(tg, cg, title, xlabel="", ylable='Density', filename="hist.png
     pass
 
 
-def get_all_histograms(rq1_tg, rq1_cg, rq2_tg, rq2_cg, rq3_novices_rq1_cg, rq3_novices_rq1_tg, rq3_novices_rq2_cg,
+def get_all_histograms(rq1_avg_times_overall_tg, rq1_avg_times_overall_cg, rq2_score_correctness_tg,
+                       rq2_score_correctness_cg, rq3_novices_rq1_cg, rq3_novices_rq1_tg, rq3_novices_rq2_cg,
                        rq3_novices_rq2_tg, rq3_experts_rq1_cg, rq3_experts_rq1_tg, rq3_experts_rq2_cg,
-                       rq3_experts_rq2_tg):
-    get_histogram(rq1_tg, rq1_cg, title="RQ1", xlabel="Time in seconds", ylable="Number of Participants",
+                       rq3_experts_rq2_tg,
+                       rq1_avg_times_only_correct_tg, rq1_avg_times_only_correct_cg, rq3_novices_rq1_only_correct_tg,
+                       rq3_novices_rq1_only_correct_cg, rq3_experts_rq1_only_correct_tg,
+                       rq3_experts_rq1_only_correct_cg):
+    get_histogram(rq1_avg_times_overall_tg, rq1_avg_times_overall_cg, title="RQ1", xlabel="Time in seconds",
+                  ylable="Number of Participants",
                   filename="hist_rq1.png")
 
-    get_histogram(rq2_tg, rq2_cg, title="RQ2", xlabel="Correct answers", ylable="Number of Participants",
+    get_histogram(rq1_avg_times_only_correct_tg, rq1_avg_times_only_correct_cg, title="RQ1 only correct answers",
+                  xlabel="Time in seconds", ylable="Number of Participants",
+                  filename="hist_rq1_only_correct_answers.png")
+
+    get_histogram(rq2_score_correctness_tg, rq2_score_correctness_cg, title="RQ2", xlabel="Correct answers",
+                  ylable="Number of Participants",
                   filename="hist_rq2.png")
 
     get_histogram(rq3_novices_rq1_tg, rq3_novices_rq1_cg, title="RQ3 Time spent novice", xlabel="Time in seconds",
                   ylable="Number of Participants",
                   filename="hist_rq3_rq1_novice.png")
+
+    get_histogram(rq3_novices_rq1_only_correct_tg, rq3_novices_rq1_cg,
+                  title="RQ3 Time spent novice only correct answers", xlabel="Time in seconds",
+                  ylable="Number of Participants",
+                  filename="hist_rq3_rq1_novice_only_correct_answers.png")
 
     get_histogram(rq3_novices_rq2_tg, rq3_novices_rq2_cg, title="RQ3 Correct answers novice", xlabel="Correct answers",
                   ylable="Number of Participants",
@@ -698,6 +1044,11 @@ def get_all_histograms(rq1_tg, rq1_cg, rq2_tg, rq2_cg, rq3_novices_rq1_cg, rq3_n
                   ylable="Number of Participants",
                   filename="hist_rq3_rq1_experts.png")
 
+    get_histogram(rq3_experts_rq1_only_correct_tg, rq3_experts_rq1_cg,
+                  title="RQ3 Time spent experts only correct answers", xlabel="Time in seconds",
+                  ylable="Number of Participants",
+                  filename="hist_rq3_rq1_experts_only_correct_answers.png")
+
     get_histogram(rq3_experts_rq2_tg, rq3_experts_rq2_cg, title="RQ3 Correct answers experts", xlabel="Correct answers",
                   ylable="Number of Participants",
                   filename="hist_rq3_rq2_experts.png")
@@ -705,27 +1056,46 @@ def get_all_histograms(rq1_tg, rq1_cg, rq2_tg, rq2_cg, rq3_novices_rq1_cg, rq3_n
     pass
 
 
-def calc_statistics(rq1_tg, rq1_cg, rq2_tg, rq2_cg, rq3_novices_rq1_cg, rq3_novices_rq1_tg, rq3_novices_rq2_cg,
-                    rq3_novices_rq2_tg, rq3_experts_rq1_cg, rq3_experts_rq1_tg, rq3_experts_rq2_cg, rq3_experts_rq2_tg):
-    summary_statistics_rq1 = get_statistics_summary(rq1_tg, rq1_cg)
-    summary_statistics_rq2 = get_statistics_summary(rq2_tg, rq2_cg)
-    summary_statistics_rq3_novices_rq1 = get_statistics_summary(rq3_novices_rq1_cg, rq3_novices_rq1_tg)
-    summary_statistics_rq3_novices_rq2 = get_statistics_summary(rq3_novices_rq2_cg, rq3_novices_rq2_tg)
-    summary_statistics_rq3_experts_rq1 = get_statistics_summary(rq3_experts_rq1_cg, rq3_experts_rq1_tg)
-    summary_statistics_rq3_experts_rq2 = get_statistics_summary(rq3_experts_rq2_cg, rq3_experts_rq2_tg)
+def calc_statistics(rq1_avg_times_overall_tg, rq1_avg_times_overall_cg, rq2_score_correctness_tg,
+                    rq2_score_correctness_cg, rq3_novices_rq1_cg, rq3_novices_rq1_tg, rq3_novices_rq2_cg,
+                    rq3_novices_rq2_tg, rq3_experts_rq1_cg, rq3_experts_rq1_tg, rq3_experts_rq2_cg, rq3_experts_rq2_tg,
+                    rq1_avg_times_only_correct_tg, rq1_avg_times_only_correct_cg, rq3_novices_rq1_only_correct_tg,
+                    rq3_novices_rq1_only_correct_cg, rq3_experts_rq1_only_correct_tg, rq3_experts_rq1_only_correct_cg):
+    summary_statistics_rq1 = get_statistics_summary(rq1_avg_times_overall_tg, rq1_avg_times_overall_cg)
+    summary_statistics_rq1_only_correct_answers = get_statistics_summary(rq1_avg_times_only_correct_tg,
+                                                                         rq1_avg_times_only_correct_cg)
+    summary_statistics_rq2 = get_statistics_summary(rq2_score_correctness_tg, rq2_score_correctness_cg)
+    summary_statistics_rq3_novices_rq1 = get_statistics_summary(rq3_novices_rq1_tg, rq3_novices_rq1_cg)
+
+    summary_statistics_rq3_novices_rq1_only_correct_answers = get_statistics_summary(rq3_novices_rq1_only_correct_tg,
+                                                                                     rq3_novices_rq1_only_correct_cg)
+    summary_statistics_rq3_novices_rq2 = get_statistics_summary(rq3_novices_rq2_tg, rq3_novices_rq2_cg)
+    summary_statistics_rq3_experts_rq1 = get_statistics_summary(rq3_experts_rq1_tg, rq3_experts_rq1_cg)
+    summary_statistics_rq3_experts_rq1_only_correct_answers = get_statistics_summary(rq3_experts_rq1_only_correct_tg,
+                                                                                     rq3_experts_rq1_only_correct_cg)
+    summary_statistics_rq3_experts_rq2 = get_statistics_summary(rq3_experts_rq2_tg, rq3_experts_rq2_cg)
 
     # get statistics as csv
     summary_statistics_rq1.to_csv("summary_statistics_rq1.csv")
+    summary_statistics_rq1_only_correct_answers.to_csv("summary_statistics_rq1_only_correct_answers.csv")
     summary_statistics_rq2.to_csv("summary_statistics_rq2.csv")
     summary_statistics_rq3_novices_rq1.to_csv("summary_statistics_rq3_novices_rq1.csv")
+    summary_statistics_rq3_novices_rq1_only_correct_answers.to_csv(
+        "summary_statistics_rq3_novices_rq1_only_correct_answers.csv")
     summary_statistics_rq3_novices_rq2.to_csv("summary_statistics_rq3_novices_rq2.csv")
     summary_statistics_rq3_experts_rq1.to_csv("summary_statistics_rq3_experts_rq1.csv")
+    summary_statistics_rq3_experts_rq1_only_correct_answers.to_csv(
+        "summary_statistics_rq3_experts_rq1_only_correct_answers.csv")
     summary_statistics_rq3_experts_rq2.to_csv("summary_statistics_rq3_experts_rq2.csv")
 
     # get histograms
-    get_all_histograms(rq1_tg, rq1_cg, rq2_tg, rq2_cg, rq3_novices_rq1_cg, rq3_novices_rq1_tg, rq3_novices_rq2_cg,
+    get_all_histograms(rq1_avg_times_overall_tg, rq1_avg_times_overall_cg, rq2_score_correctness_tg,
+                       rq2_score_correctness_cg, rq3_novices_rq1_cg, rq3_novices_rq1_tg, rq3_novices_rq2_cg,
                        rq3_novices_rq2_tg, rq3_experts_rq1_cg, rq3_experts_rq1_tg, rq3_experts_rq2_cg,
-                       rq3_experts_rq2_tg)
+                       rq3_experts_rq2_tg,
+                       rq1_avg_times_only_correct_tg, rq1_avg_times_only_correct_cg, rq3_novices_rq1_only_correct_tg,
+                       rq3_novices_rq1_only_correct_cg, rq3_experts_rq1_only_correct_tg,
+                       rq3_experts_rq1_only_correct_cg)
 
     pass
 
@@ -752,8 +1122,21 @@ def calc_effect_size(tg, cg):
     pass
 
 
-def get_sample_size(tg, cg):
-    effect = calc_effect_size(tg, cg)
+# https://www.real-statistics.com/chi-square-and-f-distributions/effect-size-chi-square/
+def calc_effect_size_for_binary(tg, cg):
+    # effect size formula: phi = sqrt(chi^2/n)
+    n = len(tg + cg)
+    contingency_table = get_contingency_table(tg, cg, solution)
+    chi_2 = chi2_contingency(contingency_table, correction=False)[0]
+    phi = np.sqrt(chi_2 / n)
+    return phi
+
+
+def get_sample_size(tg, cg, binary=False):
+    if binary:
+        effect = calc_effect_size_for_binary(tg, cg)
+    else:
+        effect = calc_effect_size(tg, cg)
     sample_size = calc_sample_size(effect)
     return sample_size
 
@@ -773,6 +1156,15 @@ def write_test_time_to_csv(results, filename):
         writer.writerow(['Task Id', 'T-Statistics', "P-Value", "Is Significant Different"])
         for result in results:
             writer.writerow([result['task_id'], result['stat'], result['p'], result['is_different']])
+    pass
+
+
+def perform_rq1_only_correct_answers_for_each_task():
+    test_results = []
+    for task in tasks:
+        test_results.append(task.get_general_difference_in_time_only_correct_answers())
+    write_test_time_to_csv(results=test_results,
+                           filename="test_results_general_difference_in_time_only_correct_answers.csv")
     pass
 
 
@@ -800,11 +1192,29 @@ def perform_novices_difference_in_time_for_each_task():
     pass
 
 
+def perform_novices_difference_in_time_only_correct_answers_for_each_task():
+    test_results = []
+    for task in tasks:
+        test_results.append(task.get_novices_difference_in_time_only_correct_answers())
+    write_test_time_to_csv(results=test_results,
+                           filename="test_results_novices_difference_in_time_only_correct_answers.csv")
+    pass
+
+
 def perform_experts_difference_in_time_for_each_task():
     test_results = []
     for task in tasks:
         test_results.append(task.get_experts_difference_in_time())
     write_test_time_to_csv(results=test_results, filename="test_results_experts_difference_in_time.csv")
+    pass
+
+
+def perform_experts_difference_in_time_only_correct_answer_for_each_task():
+    test_results = []
+    for task in tasks:
+        test_results.append(task.get_experts_difference_in_time_only_correct_answers())
+    write_test_time_to_csv(results=test_results,
+                           filename="test_results_experts_difference_in_time_only_correct_answer.csv")
     pass
 
 
@@ -860,6 +1270,67 @@ def init_all_tasks():
     pass
 
 
+def setup_tasks():
+    connEval = sqlite3.connect('dbEval2.sqlite')
+    cursorEval = connEval.cursor()
+    sql_query = "select treatment_group, experience_ROR, answer, time, evaluation " \
+                "from Eval  " \
+                "where questionID = ?"
+
+    qId = [1]
+    for i in range(len(tasks)):
+        for row in cursorEval.execute(sql_query, qId):
+            # case cg
+            if row[0] == 0:
+                tasks[qId[0] - 1].answers_cg.append(row[2])
+                tasks[qId[0] - 1].times_cg.append(row[3])
+
+                if row[4] == 1:
+                    tasks[qId[0] - 1].times_cg_correct.append(row[3])
+                    tasks[qId[0] - 1].answers_cg_correct.append(row[2])
+                # case experts
+                if row[1] >= 1:
+                    tasks[qId[0] - 1].answers_cg_experts.append(row[2])
+                    tasks[qId[0] - 1].time_cg_experts.append(row[3])
+                    if row[4] == 1:
+                        tasks[qId[0] - 1].answers_cg_experts_correct.append(row[2])
+                        tasks[qId[0] - 1].times_cg_experts_correct.append(row[3])
+                else:  # case novices
+                    tasks[qId[0] - 1].answers_cg_novices.append(row[2])
+                    tasks[qId[0] - 1].time_cg_novices.append(row[3])
+                    if row[4] == 1:
+                        tasks[qId[0] - 1].answers_cg_novices_correct.append(row[2])
+                        tasks[qId[0] - 1].times_cg_novices_correct.append(row[3])
+            else:  # case tg
+                tasks[qId[0] - 1].answers_tg.append(row[2])
+                tasks[qId[0] - 1].times_tg.append(row[3])
+
+                if row[4] == 1:
+                    tasks[qId[0] - 1].answers_tg_correct.append(row[2])
+                    tasks[qId[0] - 1].times_tg_correct.append(row[3])
+
+                if row[1] >= 1:  # experts
+                    tasks[qId[0] - 1].answers_tg_experts.append(row[2])
+                    tasks[qId[0] - 1].time_tg_experts.append(row[3])
+
+                    if row[4] == 1:
+                        tasks[qId[0] - 1].times_tg_experts_correct.append(row[3])
+                        tasks[qId[0] - 1].answers_tg_experts_correct.append(row[2])
+                else:  # novices
+                    tasks[qId[0] - 1].answers_tg_novices.append(row[2])
+                    tasks[qId[0] - 1].time_tg_novices.append(row[3])
+
+                    if row[4] == 1:
+                        tasks[qId[0] - 1].times_tg_novices_correct.append(row[3])
+                        tasks[qId[0] - 1].answers_tg_novices_correct.append(row[2])
+        print("task:")
+        print(tasks[qId[0] - 1].__dict__)
+        print("----------------------------------------")
+        qId[0] = qId[0] + 1
+
+    pass
+
+
 def analysis():
     # get data
     all_participants = get_participants_data()
@@ -896,19 +1367,101 @@ def analysis():
     difference_in_correctness_novice = perform_significance_test(rq3_novices_rq2_tg, rq3_novices_rq2_cg)
     difference_in_correctness_experts = perform_significance_test(rq3_experts_rq2_tg, rq3_experts_rq2_cg)
 
-    # get statistics
+    # get statistics - TODO: add only consider correct answers thing
     calc_statistics(rq1_tg, rq1_cg, rq2_tg, rq2_cg, rq3_novices_rq1_cg, rq3_novices_rq1_tg, rq3_novices_rq2_cg,
                     rq3_novices_rq2_tg, rq3_experts_rq1_cg, rq3_experts_rq1_tg, rq3_experts_rq2_cg, rq3_experts_rq2_tg)
 
-    sample_size_rq1 = get_sample_size(rq1_tg, rq1_cg)
-    sample_size_rq2 = get_sample_size(rq2_tg, rq2_cg)
-    sample_size_rq3_novices_rq1 = get_sample_size(rq3_novices_rq1_tg, rq3_novices_rq1_cg)
-    sample_size_rq3_novices_rq2 = get_sample_size(rq3_novices_rq2_tg, rq3_novices_rq2_cg)
-    sample_size_rq3_experst_rq1 = get_sample_size(rq3_experts_rq1_tg, rq3_experts_rq1_cg)
-    sample_size_rq3_experst_rq2 = get_sample_size(rq3_experts_rq2_tg, rq3_experts_rq2_cg)
+    sample_size_rq1 = get_sample_size(rq1_tg, rq1_cg, binary=False)
+    sample_size_rq2 = get_sample_size(rq2_tg, rq2_cg, binary=False)
+
+    sample_size_rq3_novices_rq1 = get_sample_size(rq3_novices_rq1_tg, rq3_novices_rq1_cg, binary=False)
+
+    sample_size_rq3_novices_rq2 = get_sample_size(rq3_novices_rq2_tg, rq3_novices_rq2_cg, binary=True)
+    sample_size_rq3_experts_rq1 = get_sample_size(rq3_experts_rq1_tg, rq3_experts_rq1_cg, binary=False)
+    sample_size_rq3_experts_rq2 = get_sample_size(rq3_experts_rq2_tg, rq3_experts_rq2_cg, binary=True)
 
 
-analysis()
+# analysis()
+# convert_sqlite_to_csv()
+# convert_csv_data_to_participant()
+
+def perform_analysis():
+    participants = convert_csv_data_to_participant()
+    setup_tasks()
+
+    # get data
+    rq1_avg_times_overall_tg, rq1_avg_times_overall_cg = get_rq1_data(participants)
+    rq1_avg_times_only_correct_tg, rq1_avg_times_only_correct_cg = get_rq1_data_only_correct(participants)
+    rq2_score_correctness_tg, rq2_score_correctness_cg = get_rq2_data(participants)
+    rq3_novices_rq1_tg, rq3_novices_rq1_cg, rq3_novices_rq2_tg, rq3_novices_rq2_cg, \
+    rq3_experts_rq1_tg, rq3_experts_rq1_cg, rq3_experts_rq2_tg, rq3_experts_rq2_cg, \
+    rq3_novices_rq1_only_correct_tg, rq3_novices_rq1_only_correct_cg, \
+    rq3_experts_rq1_only_correct_tg, rq3_experts_rq1_only_correct_cg = get_rq3_data(participants)
+
+    # perform analysis for each task
+    perform_analysis_for_each_task()
+
+    difference_in_time = perform_significance_test(rq1_avg_times_overall_tg, rq1_avg_times_overall_cg)
+    print(f"{difference_in_time=}")
+
+    difference_in_time_only_correct_answers = perform_significance_test(rq1_avg_times_only_correct_tg,
+                                                                        rq1_avg_times_only_correct_cg)
+    print(f"{difference_in_time_only_correct_answers=}")
+
+    difference_in_correctness = perform_significance_test(rq1_avg_times_overall_tg, rq1_avg_times_overall_cg)
+    print(f"{difference_in_correctness=}")
+
+    difference_in_time_novice = perform_significance_test(rq3_novices_rq1_tg, rq3_novices_rq1_cg)
+    print(f"{difference_in_time_novice=}")
+
+    difference_in_time_novice_only_correct_answers = perform_significance_test(rq3_novices_rq1_only_correct_tg,
+                                                                               rq3_novices_rq1_only_correct_cg)
+    print(f"{difference_in_time_novice_only_correct_answers=}")
+
+    difference_in_time_experts = perform_significance_test(rq3_experts_rq1_tg, rq3_experts_rq1_cg)
+    print(f"{difference_in_time_experts=}")
+
+    difference_in_time_experts_only_correct_tg = perform_significance_test(rq3_experts_rq1_only_correct_tg,
+                                                                           rq3_experts_rq1_only_correct_cg)
+    print(f"{difference_in_time_experts_only_correct_tg=}")
+
+    difference_in_correctness_novice = perform_significance_test(rq3_novices_rq2_tg, rq3_novices_rq2_cg)
+    print(f"{difference_in_correctness_novice=}")
+
+    difference_in_correctness_experts = perform_significance_test(rq3_experts_rq2_tg, rq3_experts_rq2_cg)
+    print(f"{difference_in_correctness_experts=}")
+
+    calc_statistics(rq1_avg_times_overall_tg, rq1_avg_times_overall_cg, rq2_score_correctness_tg,
+                    rq2_score_correctness_cg, rq3_novices_rq1_cg, rq3_novices_rq1_tg, rq3_novices_rq2_cg,
+                    rq3_novices_rq2_tg, rq3_experts_rq1_cg, rq3_experts_rq1_tg, rq3_experts_rq2_cg, rq3_experts_rq2_tg,
+                    rq1_avg_times_only_correct_tg, rq1_avg_times_only_correct_cg, rq3_novices_rq1_only_correct_tg,
+                    rq3_novices_rq1_only_correct_cg, rq3_experts_rq1_only_correct_tg, rq3_experts_rq1_only_correct_cg)
+
+
+def perform_analysis_for_each_task():
+    # rq1
+    perform_rq1_for_each_task()
+    # rq1 only consider correct answers
+    perform_rq1_only_correct_answers_for_each_task()
+    # rq2
+    perform_general_difference_in_correctness_for_each_task()
+    # rq3 novices rq1
+    perform_novices_difference_in_time_for_each_task()
+    # rq3 novices rq1 - consider only correct answers
+    perform_novices_difference_in_time_only_correct_answers_for_each_task()
+    # rq3 novices rq2
+    perform_novices_difference_in_correctness_for_each_task()
+    # rq3 experts rq1
+    perform_experts_difference_in_time_for_each_task()
+    # rq3 experts rq1 - consider only correct answers
+    perform_experts_difference_in_time_only_correct_answer_for_each_task()
+    # rq3 experts rq2
+    perform_experts_difference_in_correctness_for_each_task()
+
+
+if __name__ == '__main__':
+    # convert_sqlite_to_csv()
+    perform_analysis()
 
 # if __name__ == '__main__':
 #     conn = sqlite3.connect('surveyDa/ta.sqlite')
